@@ -1,0 +1,12 @@
+Script started on 2023-09-14 00:47:22+00:00 [TERM="xterm-256color" TTY="/dev/pts/0" COLUMNS="110" LINES="45"]
+[0;32m@SteamingPilot [0m➜ [1;34m/workspaces/cs4541/assignments/assignment0 [0;36m([1;31mmain[0;36m) [0m$ mkae[K[K[Kake
+gcc -std=c99 -Wall -o simple_c_program simple_c_program.c
+[0;32m@SteamingPilot [0m➜ [1;34m/workspaces/cs4541/assignments/assignment0 [0;36m([1;31mmain[0;36m) [0m$ make run
+./simple_c_program
+Hello World!
+[0;32m@SteamingPilot [0m➜ [1;34m/workspaces/cs4541/assignments/assignment0 [0;36m([1;31mmain[0;36m) [0m$ make clean
+rm -rf simple_c_program
+[0;32m@SteamingPilot [0m➜ [1;34m/workspaces/cs4541/assignments/assignment0 [0;36m([1;31mmain[0;36m) [0m$ exit
+exit
+
+Script done on 2023-09-14 00:47:37+00:00 [COMMAND_EXIT_CODE="0"]

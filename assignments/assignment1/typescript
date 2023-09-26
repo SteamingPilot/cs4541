@@ -1,0 +1,36 @@
+Script started on 2023-09-26 03:43:56+00:00 [TERM="xterm-256color" TTY="/dev/pts/0" COLUMNS="296" LINES="23"]
+[0;32m@SteamingPilot [0m➜ [1;34m/workspaces/cs4541/assignments/assignment1 [0;36m([1;31mmain[0;36m) [0m$ make
+gcc -std=c99 -Wall -o number_demonstrations number_demonstrations.c
+[01m[Knumber_demonstrations.c:[m[K In function ‘[01m[Kmain[m[K’:
+[01m[Knumber_demonstrations.c:36:12:[m[K [01;35m[Kwarning: [m[Kinteger overflow in expression of type ‘[01m[Kint[m[K’ results in ‘[01m[K-1794967296[m[K’ [[01;35m[K-Woverflow[m[K]
+   36 |  p5 = 50000[01;35m[K*[m[K50000;
+      |            [01;35m[K^[m[K
+[01m[Knumber_demonstrations.c:39:12:[m[K [01;35m[Kwarning: [m[Kinteger overflow in expression of type ‘[01m[Kint[m[K’ results in ‘[01m[K-694967296[m[K’ [[01;35m[K-Woverflow[m[K]
+   39 |  p5 = 60000[01;35m[K*[m[K60000;
+      |            [01;35m[K^[m[K
+[01m[Knumber_demonstrations.c:42:12:[m[K [01;35m[Kwarning: [m[Kinteger overflow in expression of type ‘[01m[Kint[m[K’ results in ‘[01m[K605032704[m[K’ [[01;35m[K-Woverflow[m[K]
+   42 |  p5 = 70000[01;35m[K*[m[K70000;
+      |            [01;35m[K^[m[K
+[0;32m@SteamingPilot [0m➜ [1;34m/workspaces/cs4541/assignments/assignment1 [0;36m([1;31mmain[0;36m) [0m$ make run
+./number_demonstrations
+Problem 1: 2.5000000000
+Problem 2: -0.1000000015
+Problem 3a: 0.000000
+Problem 3b: 0.333333
+Problem 4a: 9999999.340000
+Problem 4b: 9999999.000000
+Problem 5a: 900000000
+Problem 5b: 1600000000
+Problem 5c: -1794967296
+Problem 5d: -694967296
+Problem 5e: 605032704
+Problem 6a: 100000002004087734272.000000
+Problem 6b: 100000002004087734272.000000
+Problem 6c: 103500002601996386304.000000
+Problem 6d: 100000002004087734272.000000
+[0;32m@SteamingPilot [0m➜ [1;34m/workspaces/cs4541/assignments/assignment1 [0;36m([1;31mmain[0;36m) [0m$ make ru[K[Kclean
+rm ./number_demonstrations
+[0;32m@SteamingPilot [0m➜ [1;34m/workspaces/cs4541/assignments/assignment1 [0;36m([1;31mmain[0;36m) [0m$ exit
+exit
+
+Script done on 2023-09-26 03:44:10+00:00 [COMMAND_EXIT_CODE="0"]

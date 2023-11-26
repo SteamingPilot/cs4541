@@ -65,6 +65,8 @@ def getDecimalFromHexString(hex_string):
 
 
 def alignSize(size):
+    if size%ALIGNMENT_SIZE == 0:
+        return size
     return size + (ALIGNMENT_SIZE - (size%ALIGNMENT_SIZE))
 
 
@@ -214,7 +216,19 @@ class FreeList_Implicit(HeapFreeList):
         new_block_header_location = self.fit.findFreeBlockHeader(INITIAL_HEADER_LOCATION, aligned_allocation_size)
         current_block_size = getDecimalFromHexString(self.heap.memory[new_block_header_location].value)
 
-        new_block_header_value_dec = aligned_allocation_size + HF_OVERHEAD + ALLOCATION_SET_BIT
+        
+        new_block_header_value_dec = aligned_allocation_size + HF_OVERHEAD
+
+        if current_block_size - new_block_header_value_dec < (HF_OVERHEAD + ALIGNMENT_SIZE):
+            # Block size is too small to split. 
+            # So we will take the whole block
+            new_block_header_value_dec = current_block_size
+
+
+        # Set Allocation Bit
+        new_block_header_value_dec += ALLOCATION_SET_BIT
+        
+        # Footer 
         new_block_footer_value_dec = new_block_header_value_dec
 
         self.heap.memory[new_block_header_location].value = getHexStringFromDecimal(new_block_header_value_dec)
@@ -223,7 +237,7 @@ class FreeList_Implicit(HeapFreeList):
         self.heap.memory[new_block_footer_location].value = getHexStringFromDecimal(new_block_footer_value_dec)
 
         # Now we have to add the new header for the next block (if splitting is possible)
-        if current_block_size > (aligned_allocation_size + HF_OVERHEAD):
+        if current_block_size > (new_block_header_value_dec - ALLOCATION_SET_BIT):
             remaining_block_size = current_block_size - (new_block_header_value_dec - ALLOCATION_SET_BIT)
             self.heap.memory[new_block_footer_location+1].value = getHexStringFromDecimal(remaining_block_size)
 
@@ -329,7 +343,7 @@ class FitType_FirstFitImplicit(FitType):
 
     def findFreeBlockHeader(self, start_index: int, new_block_size: int) -> int:
         i = start_index
-        while i < self.free_list.heap.mem_count:
+        while i < self.free_list.heap.mem_count - 1:
             block_size = getDecimalFromHexString(self.free_list.heap.memory[i].value)
             if (block_size % 2 == 0) and (block_size >= (new_block_size + HF_OVERHEAD)):
                 return i
@@ -346,8 +360,8 @@ class FitType_BestFitImplicti(FitType):
 
         # Setting min to highest value possible
         min_block_location = self.free_list.heap.mem_count
-        min_block_size = self.free_list.heap.mem_count
-        while i < self.free_list.heap.mem_count:
+        min_block_size = self.free_list.heap.mem_count * WORD_SIZE
+        while i < self.free_list.heap.mem_count-1:
             block_size = getDecimalFromHexString(self.free_list.heap.memory[i].value)
             if (block_size % 2 == 0) and (block_size >= new_block_size + HF_OVERHEAD):
                 if block_size < min_block_size:
@@ -437,6 +451,8 @@ def main():
 
         if arguements[ARGUMENT_FIT] == ARG_VAL_FIRST_FIT:
             heap.free_list.fit = FitType_FirstFitImplicit(heap.free_list)
+        elif arguements[ARGUMENT_FIT] == ARG_VAL_BEST_FIT:
+            heap.free_list.fit = FitType_BestFitImplicti(heap.free_list)
 
     elif arguements[ARGUMENT_FREE_LIST] == ARG_VAL_EXPLICIT_LIST:
         heap.free_list = FreeList_Explicit(heap)

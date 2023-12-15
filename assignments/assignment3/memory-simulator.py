@@ -14,13 +14,15 @@ INITIAL_HEADER_LOCATION = 1
 HEX_PADDING = 10
 PLACEHOLDER_VALUE = 1
 
+
 WORD_SIZE = 4 
 DOUBLE_WORD_SIZE = 8
 ALIGNMENT_SIZE = DOUBLE_WORD_SIZE
 
 HF_OVERHEAD = 2*WORD_SIZE
 ALLOCATION_SET_BIT = 1
-
+MAX_HEAP_SIZE = 100_000
+NONE_LOCATION = 0
 
 ARGUMENT_VERBOSE = 0
 ARGUMENT_OUTPUT = 1
@@ -48,11 +50,15 @@ CMD_F_IND_ADDR = 1
 FIT_FIRST = 0 
 FIT_BEST = 1
 
+PREV_PTR_OFFSET = 1
+NEXT_PTR_OFFSET = 2
+
+
 
 def printError(message: str):
     if message is not None:
         print(message)
-    print("usage: python3 ./memory-sim [-v] [-o <output-path>] --free-list=[implicit or explicit] --fit=[first or best] <input file>")
+    print("usage: python3 ./memory-simulator.py [-v] [-o <output-path>] --free-list=[implicit or explicit] --fit=[first or best] <input file>")
 
 
 def getHexStringFromDecimal(decimal, padding=HEX_PADDING):
@@ -133,7 +139,6 @@ class Heap:
 
 
     def my_reallocate(self, size, old_addr_alias, new_addr_alias):
-        old_addr = self.address_mapper[old_addr_alias]
         new_addr = self.free_list.reallocate(size, old_addr_alias)
         self.address_mapper[new_addr_alias] = new_addr
 
@@ -214,6 +219,12 @@ class FreeList_Implicit(HeapFreeList):
         aligned_allocation_size = alignSize(allocation_size)
         
         new_block_header_location = self.fit.findFreeBlockHeader(INITIAL_HEADER_LOCATION, aligned_allocation_size)
+
+        if new_block_header_location == self.heap.mem_count:
+            # Not enough space in the heap, so we need to increase the heap
+            new_block_header_location = self.sbrk(aligned_allocation_size)
+
+
         current_block_size = getDecimalFromHexString(self.heap.memory[new_block_header_location].value)
 
         
@@ -277,7 +288,7 @@ class FreeList_Implicit(HeapFreeList):
         free_block_header = self.heap.memory[free_block_header_location]
 
         # To free the block we have to set the to 0
-        free_block_header_value_dec =  getDecimalFromHexString(free_block_header.value) - 1
+        free_block_header_value_dec =  getDecimalFromHexString(free_block_header.value) - ALLOCATION_SET_BIT
 
         # Footer 
         free_block_footer_location = free_block_header_location + (free_block_header_value_dec//WORD_SIZE) - 1
@@ -322,12 +333,257 @@ class FreeList_Implicit(HeapFreeList):
 
 
     def sbrk(self, size: int):
-        pass
+        # Add memory entries to the heap
+        new_block_header_value_dec = size + HF_OVERHEAD
+        additional_mem_entries = new_block_header_value_dec//4
+
+        new_mem_count = self.heap.mem_count + additional_mem_entries
+
+        if new_mem_count > MAX_HEAP_SIZE:
+            print(f"memory-simulator: total heap capacity reached! ({MAX_HEAP_SIZE} words)")
+            exit()     
+
+
+        for i in range(self.heap.mem_count, new_mem_count):
+           new_mem_ent = MemoryEntry(i, MEM_ENT_TYPE_EMPTY, None)
+           self.heap.memory.append(new_mem_ent)
+
+        # New block's header will be the last mem_entry of the old size
+        new_block_header_location = self.heap.mem_count - 1
+        self.heap.mem_count = new_mem_count
+
+       
+       
+        # Set the new Header Location correctly
+        self.heap.memory[new_block_header_location].type = MEM_ENT_TYPE_HEADER
+        self.heap.memory[new_block_header_location].value = getHexStringFromDecimal(new_block_header_value_dec)
+
+        # We are not setting the Footer because, since size increased based on requirements, 
+        # the footer will be automatically set by the allocator
+        
+        # Chaning the last placeholder to the new placeholder
+        self.heap.memory[new_mem_count - 1].value = getHexStringFromDecimal(PLACEHOLDER_VALUE)
+        self.heap.memory[new_mem_count - 1].type = MEM_ENT_TYPE_PLACEHOLDER
+
+        return new_block_header_location
+
+
 
 class FreeList_Explicit(HeapFreeList):
     def __init__(self, heap: Heap) -> None:
         super().__init__(heap)
+        self.root: str = INITIAL_HEADER_LOCATION
 
+        self.heap.memory[INITIAL_HEADER_LOCATION+PREV_PTR_OFFSET].value = getHexStringFromDecimal(NONE_LOCATION)
+        self.heap.memory[INITIAL_HEADER_LOCATION+NEXT_PTR_OFFSET].value = getHexStringFromDecimal(NONE_LOCATION)
+
+    def allocate(self, allocation_size: int):
+        aligned_allocation_size = alignSize(allocation_size)
+
+        new_block_header_location = self.fit.findFreeBlockHeader(INITIAL_HEADER_LOCATION, aligned_allocation_size)
+        current_block_size = getDecimalFromHexString(self.heap.memory[new_block_header_location].value)
+
+        new_block_header_value_dec = aligned_allocation_size + HF_OVERHEAD
+        if current_block_size - new_block_header_value_dec < (HF_OVERHEAD + ALIGNMENT_SIZE):
+            # Block size is too small to split.
+            # So we will take the whole block
+            new_block_header_value_dec = current_block_size
+
+        # Set Allocation Bit
+        new_block_header_value_dec += ALLOCATION_SET_BIT
+        self.heap.memory[new_block_header_location].value = getHexStringFromDecimal(new_block_header_value_dec)
+        
+        # Footer
+        new_block_footer_value_dec = new_block_header_value_dec
+        new_block_footer_location = new_block_header_location + ((new_block_header_value_dec - ALLOCATION_SET_BIT)//WORD_SIZE) - 1
+        self.heap.memory[new_block_footer_location].value = getHexStringFromDecimal(new_block_footer_value_dec)
+
+
+        # Next block Header
+        next_block_header_location = getDecimalFromHexString(self.heap.memory[new_block_header_location+NEXT_PTR_OFFSET].value)
+        prev_block_header_location = getDecimalFromHexString(self.heap.memory[new_block_header_location+PREV_PTR_OFFSET].value)
+        is_prev_block_root = False
+
+        if prev_block_header_location == 0:
+            prev_block_header_location = self.root
+            is_prev_block_root = True
+        
+
+        # If there was a split, we have add the new header of the next block
+        if current_block_size > (new_block_header_value_dec - ALLOCATION_SET_BIT):
+            split_block_size = current_block_size - (new_block_header_value_dec - ALLOCATION_SET_BIT)
+
+            split_block_header_loaction = new_block_footer_location + 1
+            self.heap.memory[split_block_header_loaction].value = getHexStringFromDecimal(split_block_size)
+
+            # Footer of the new splitted block
+            split_block_footer_location = split_block_header_loaction+(split_block_size//WORD_SIZE)-1
+            self.heap.memory[split_block_footer_location].value = getHexStringFromDecimal(split_block_size)
+
+            # Update the pointers of the Free list
+                
+            # Split block pointers
+            self.heap.memory[split_block_header_loaction+PREV_PTR_OFFSET].value = getHexStringFromDecimal(prev_block_header_location)
+            self.heap.memory[split_block_header_loaction+NEXT_PTR_OFFSET].value = getHexStringFromDecimal(next_block_header_location)
+
+            
+            if next_block_header_location != 0: 
+                # if there is a next block
+                # Next block's Previous pointer is set to split block's header
+                self.heap.memory[next_block_header_location+PREV_PTR_OFFSET].value = getHexStringFromDecimal(split_block_header_loaction)
+
+            # Prev Block's Next Pointer
+            if not is_prev_block_root:
+                self.heap.memory[prev_block_header_location+NEXT_PTR_OFFSET].value = getHexStringFromDecimal(split_block_header_loaction)
+                
+            if is_prev_block_root: 
+                # Set Root pointing to current header
+                self.root = split_block_header_loaction
+                self.heap.memory[split_block_header_loaction+PREV_PTR_OFFSET].value = getHexStringFromDecimal(NONE_LOCATION)
+        else:
+            # Setting Pointers (no split)
+            # my_prev.next = my_next
+            self.heap.memory[prev_block_header_location+NEXT_PTR_OFFSET].value = getHexStringFromDecimal(next_block_header_location)
+
+            # my_next.prev = my_prev
+            self.heap.memory[next_block_header_location+PREV_PTR_OFFSET].value = getHexStringFromDecimal(prev_block_header_location)
+
+            if is_prev_block_root:
+                self.root = next_block_header_location
+                self.heap.memory[next_block_header_location+PREV_PTR_OFFSET].value = getHexStringFromDecimal(NONE_LOCATION)
+
+
+        return new_block_header_location+1
+    
+    def free(self, ptr):
+        # Get the Header from the alias ptr
+        free_block_header_location = self.heap.address_mapper[ptr]-1 
+        # Free the allocation 
+        free_block_header_val_dec = getDecimalFromHexString(self.heap.memory[free_block_header_location].value) - ALLOCATION_SET_BIT
+
+
+        # Footer
+        free_block_footer_location = free_block_header_location + (free_block_header_val_dec//WORD_SIZE) - 1
+        free_block_footer_value_dec = free_block_header_val_dec
+
+        # Coalesce
+        if self.heap.memory[free_block_header_location-1].type != MEM_ENT_TYPE_PLACEHOLDER:
+            # It's not the direct next block of the placeholder.
+            # Meaning there is a possibility of coalescing of previous block
+            prev_block_footer_value_dec = getDecimalFromHexString(self.heap.memory[free_block_header_location - 1].value)
+            if prev_block_footer_value_dec % 2 == 0:
+                # Prev block is free
+                # We have to adjust the pointers of the previous block before coalescing
+                # Get the location of prev and next block
+                my_block_footer_location = free_block_header_location-1
+                my_block_header_location = my_block_footer_location - (prev_block_footer_value_dec//WORD_SIZE) + 1
+                my_prev_location = getDecimalFromHexString(self.heap.memory[my_block_header_location+PREV_PTR_OFFSET].value)
+                my_next_location = getDecimalFromHexString(self.heap.memory[my_block_header_location+NEXT_PTR_OFFSET].value)
+                
+                # my_prev.next = my_next
+                if my_prev_location == 0:
+                    # the prev block is the root
+                    self.root = my_next_location 
+                else:
+                    self.heap.memory[my_prev_location+NEXT_PTR_OFFSET].value = getHexStringFromDecimal(my_next_location)
+
+                # my_next.prev = my_prev
+                if my_next_location != 0:
+                    self.heap.memory[my_next_location+PREV_PTR_OFFSET].value = getHexStringFromDecimal(my_prev_location)
+
+                # Now coalesce the header
+                free_block_header_location = free_block_header_location - (prev_block_footer_value_dec//WORD_SIZE)
+                # New block size
+                free_block_header_val_dec = free_block_header_val_dec + prev_block_footer_value_dec
+
+        next_location_zero = False
+
+        if self.heap.memory[free_block_footer_location + 1].type != MEM_ENT_TYPE_PLACEHOLDER:
+            # It's not the last block
+
+            next_block_header_location = free_block_footer_location + 1
+            next_block_header_val_dec = getDecimalFromHexString(self.heap.memory[next_block_header_location].value)
+
+            if next_block_header_val_dec % 2 == 0:
+                # Next block is free
+                
+                # We have to adjust the pointers of the previous block before coalescing
+                # Get the location of prev and next block
+                my_block_header_location = next_block_header_location
+                my_prev_location = getDecimalFromHexString(self.heap.memory[my_block_header_location+PREV_PTR_OFFSET].value)
+                my_next_location = getDecimalFromHexString(self.heap.memory[my_block_header_location+NEXT_PTR_OFFSET].value)
+                
+                # my_prev.next = my_next
+                if my_prev_location == 0:
+                    # the prev block is the root
+                    if my_next_location != 0:
+                        self.root = my_next_location
+                    else:
+                        self.root = free_block_header_location
+                else:
+                    self.heap.memory[my_prev_location+NEXT_PTR_OFFSET].value = getHexStringFromDecimal(my_next_location)
+
+                # my_next.prev = my_prev
+                # if my_next_location != 0:
+                    # self.heap.memory[my_next_location+PREV_PTR_OFFSET].value = getHexStringFromDecimal(my_prev_location)
+                if my_next_location == 0:
+                    next_location_zero = True
+
+
+
+                free_block_footer_location += (next_block_header_val_dec//WORD_SIZE)
+                free_block_header_val_dec += next_block_header_val_dec
+
+
+        # LIFO policy
+        # Current Top Block
+        current_top_block_location = self.root
+        
+        # set root to the Freed block
+        self.root = free_block_header_location
+        # Free block's prev = none
+        self.heap.memory[free_block_header_location + PREV_PTR_OFFSET].value = getHexStringFromDecimal(NONE_LOCATION)
+        if current_top_block_location != free_block_header_location:
+            # Free block.next = current top block
+            self.heap.memory[free_block_header_location + NEXT_PTR_OFFSET].value = getHexStringFromDecimal(current_top_block_location)
+            # CurrentTopBlock.prev = FreeBlockHeader
+            self.heap.memory[current_top_block_location + PREV_PTR_OFFSET].value = getHexStringFromDecimal(free_block_header_location)
+
+        else:
+            self.heap.memory[free_block_header_location+NEXT_PTR_OFFSET].value = getHexStringFromDecimal(NONE_LOCATION) 
+
+        # Setting header and footer of the freed block
+        self.heap.memory[free_block_header_location].value = getHexStringFromDecimal(free_block_header_val_dec)
+        self.heap.memory[free_block_footer_location].value = getHexStringFromDecimal(free_block_header_val_dec)
+
+    def reallocate(self, size: int, old_ptr_alias):
+        new_block_payload_location = self.allocate(size)
+        new_block_header_location = new_block_payload_location - 1
+        # Now we have to copy the payload of the old block to the new block
+        old_block_header_location = self.heap.address_mapper[old_ptr_alias] - 1
+        
+        old_block_footer_location = self.heap.getFooterLocationFromHeaderLocation(old_block_header_location)
+        for i in range(old_block_header_location+1, old_block_footer_location):
+            old_payload_mem_ent = self.heap.memory[i]
+            
+            new_payload_location =  new_block_header_location + (i - old_block_header_location)
+            new_payload_mem_ent = self.heap.memory[new_payload_location]
+            new_payload_mem_ent.value = old_payload_mem_ent.value
+
+        # Free the old block
+        self.free(old_ptr_alias)
+        return new_block_payload_location
+
+
+    @property
+    def fit(self):
+        return self._fit
+    @fit.setter
+    def fit(self, value):
+        if isinstance(value, FitType):
+            self._fit = value
+        else:
+            raise("Invalid fit type")
 
 
 class FitType:
@@ -349,7 +605,8 @@ class FitType_FirstFitImplicit(FitType):
                 return i
             i += block_size//WORD_SIZE
 
-        return -1
+        # Returning mem_count which is invalid to indicate no free blocks found
+        return self.free_list.heap.mem_count
     
 class FitType_BestFitImplicti(FitType):
     def __init__(self, free_list: HeapFreeList) -> None:
@@ -373,8 +630,42 @@ class FitType_BestFitImplicti(FitType):
         return min_block_location
            
            
-        
+class FitType_FirstFitExplicit(FitType):
+    def __init__(self, free_list: FreeList_Explicit) -> None:
+        super().__init__(free_list)  
     
+    def findFreeBlockHeader(self, start_index: int, new_block_size: int) -> int:
+        curr_block_header_location = self.free_list.root
+
+        while curr_block_header_location != 0:
+            curr_block_size = getDecimalFromHexString(self.free_list.heap.memory[curr_block_header_location].value)
+            if curr_block_size >= (new_block_size + HF_OVERHEAD):
+                return curr_block_header_location
+
+            next_ptr_location = curr_block_header_location + NEXT_PTR_OFFSET
+            curr_block_header_location = getDecimalFromHexString(self.free_list.heap.memory[next_ptr_location].value) 
+
+class FitType_BestFitExplicit(FitType):
+    def __init__(self, free_list: FreeList_Explicit) -> None:
+        super().__init__(free_list)
+    
+    def findFreeBlockHeader(self, start_index: int, new_block_size: int) -> int:
+        curr_block_header_location = self.free_list.root
+
+        
+        min_block_size = self.free_list.heap.mem_count*WORD_SIZE
+        min_block_header_loaction = self.free_list.heap.mem_count
+        while curr_block_header_location != 0:
+            curr_block_size = getDecimalFromHexString(self.free_list.heap.memory[curr_block_header_location].value)
+            if curr_block_size >= (new_block_size + HF_OVERHEAD):
+                if curr_block_header_location < min_block_size:
+                    min_block_size = curr_block_size
+                    min_block_header_loaction = curr_block_header_location
+
+            next_ptr_location = curr_block_header_location + NEXT_PTR_OFFSET
+            curr_block_header_location = getDecimalFromHexString(self.free_list.heap.memory[next_ptr_location].value) 
+
+        return min_block_header_loaction
 
 
 def main():
@@ -456,6 +747,10 @@ def main():
 
     elif arguements[ARGUMENT_FREE_LIST] == ARG_VAL_EXPLICIT_LIST:
         heap.free_list = FreeList_Explicit(heap)
+        if arguements[ARGUMENT_FIT] == ARG_VAL_FIRST_FIT:
+            heap.free_list.fit = FitType_FirstFitExplicit(heap.free_list)
+        elif arguements[ARGUMENT_FIT] == ARG_VAL_BEST_FIT:
+            heap.free_list.fit = FitType_BestFitExplicit(heap.free_list)
 
 
     # Open the Input File

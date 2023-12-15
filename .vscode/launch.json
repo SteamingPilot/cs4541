@@ -5,11 +5,32 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "/workspaces/cs4541/assignments/assignment3/memory-simulator.py",
+            "args": [
+                "-v",
+                "--free-list=explicit",
+                "--fit=first",
+                "/workspaces/cs4541/assignments/assignment3/test-in"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "/workspaces/cs4541/test2",
-            "args": ["-v","-s", "1", "-E", "2", "-b", "4", "-t", "/workspaces/cs4541/wmucachelab2/traces/trans.trace"],
+            "program": "/workspaces/cs4541/assignments/assignment3/memory-simulator.py",
+            "args": [
+                "-v",
+                "-o",
+                "mytestout",
+                "--free-list=implicit",
+                "--fit=first",
+                "/workspaces/cs4541/assignments/assignment3/test/examples/1.in"
+            ],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

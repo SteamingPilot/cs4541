@@ -31,7 +31,7 @@ fit = "first"
 free_lists = ["implicit", "explicit"] 
 fits = ["first", "best"]
 
-for fileno in range(1, 13):
+for fileno in range(1, 12):
     input_filepath = file_dir + str(fileno) + ".in"
 
     print(f"{'='*20}")
